@@ -5,7 +5,7 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Cont
 logging.basicConfig(level=logging.INFO)
 
 # ==== إعدادات يجب تعديلها ====
-BOT_TOKEN = "ضع_التوكن_هنا"          # التوكن من BotFather
+BOT_TOKEN = "8966926917:AAH_NfukVrf2efJwVREW9nOdQV311YtVeYY"          # التوكن من BotFather
 # لا حاجة لكتابة معرفات الأدمينات يدوياً — البوت يتحقق تلقائياً من تيليجرام
 # ==============================
 
