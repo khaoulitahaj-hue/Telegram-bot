@@ -5,7 +5,7 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Cont
 logging.basicConfig(level=logging.INFO)
 
 # ==== إعدادات يجب تعديلها ====
-BOT_TOKEN = import os
+import os
 BOT_TOKEN = os.environ.get("BOT_TOKEN")          # التوكن من BotFather
 # لا حاجة لكتابة معرفات الأدمينات يدوياً — البوت يتحقق تلقائياً من تيليجرام
 # ==============================
