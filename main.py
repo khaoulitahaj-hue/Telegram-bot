@@ -50,7 +50,7 @@ def generate_full_caption():
     caption += "🏷️ أدوار الغاليات :\n"
     if roles_dict:
         for idx, (u_id, data) in enumerate(roles_dict.items(), 1):
-            line = f"{idx}-🌷 {data['name']}"
+            line = f"🌹 {i}. \u200e{name}\n"
             if data['read']:
                 line += " ✅️"
             if data['similar']:
@@ -63,7 +63,7 @@ def generate_full_caption():
     caption += "\n🏷️ المستمعات:\n"
     if listeners_dict:
         for idx, (u_id, name) in enumerate(listeners_dict.items(), 1):
-            caption += f"{idx}-🌸 {name}\n"
+            caption += f"🌸 {i}. \u200e{name}\n"
     else:
         caption += "لا يوجد أسماء بعد\n"
         
@@ -71,7 +71,8 @@ def generate_full_caption():
     caption += "\n🏷️ المعتذرات:\n"
     if excused_dict:
         for idx, (u_id, name) in enumerate(excused_dict.items(), 1):
-            caption += f"{idx}-🍂 {name}\n"
+            caption += f"🌺 {i}. \u200e{name}\n"
+
     else:
         caption += "لا يوجد أسماء بعد\n"
         
