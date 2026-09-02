@@ -1,6 +1,7 @@
 import os
 import logging
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from hijri_converter import Gregorian
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -27,7 +28,7 @@ def get_formatted_header():
     now = datetime.now()
     hijri_date = Gregorian(now.year, now.month, now.day).to_hijri()
     
-    gregorian_str = now.strftime("%Y / %m / %d")
+egypt_time = datetime.now(ZoneInfo("Africa/Cairo")).strftime("%I:%M %p")
     hijri_str = f"{hijri_date.year} / {hijri_date.month} / {hijri_date.day}"
     time_str = now.strftime("%H:%M")
     text += f"⏰ الوقت: {egypt_time}\n"
