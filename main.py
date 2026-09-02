@@ -1,7 +1,6 @@
 import os
 import logging
-from datetime import datetime
-import pytz
+from datetime import datetime, timezone, timedelta
 from hijri_converter import Gregorian
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -11,14 +10,14 @@ from telegram.ext import (
     ContextTypes,
 )
 
-# إعداد السجلات لمتابعة الأخطاء
+# إعداد السجلات
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO
 )
 
-# تحديد المنطقة الزمنية لمصر
-EGYPT_TZ = pytz.timezone("Africa/Cairo")
+# رمز إجبار الاتجاه من اليمين إلى اليسار (Right-to-Left Mark)
+RLM = "\u200f"
 
 # متغيرات حالة القائمة والبيانات في الذاكرة
 is_registration_open = True
@@ -28,13 +27,13 @@ excused_dict = {}     # {user_id: {"name": str, "username": str}}
 
 def get_formatted_header():
     """توليد ترويسة التاريخ والوقت بتوقيت مصر بتنسيق متوازن"""
-    # جلب الوقت الحالي بتوقيت مصر
-    now = datetime.now(EGYPT_TZ)
+    egypt_offset = timedelta(hours=3) # توقيت مصر UTC+3
+    now = datetime.now(timezone.utc) + egypt_offset
     hijri_date = Gregorian(now.year, now.month, now.day).to_hijri()
     
     gregorian_str = now.strftime("%Y / %m / %d")
     hijri_str = f"{hijri_date.year} / {hijri_date.month} / {hijri_date.day}"
-    time_str = now.strftime("%I:%M %p") # صيغة 12 ساعة مع AM/PM
+    time_str = now.strftime("%I:%M %p")
     
     header = (
         f"❖════════════════════❖\n"
@@ -48,47 +47,47 @@ def get_formatted_header():
     return header
 
 def generate_full_caption():
-    """بناء النص الكامل للقائمة بجميع أقسامها والاسم اللاتيني جهة اليمين"""
+    """بناء النص الكامل للقائمة مع إجبار المحاذاة لليمين باستخدام RLM"""
     caption = get_formatted_header() + "\n"
     
     # 1. قسم أدوار الغاليات
-    caption += "🏷️ أدوار الغاليات :\n"
+    caption += f"{RLM}🏷️ أدوار الغاليات :\n"
     if roles_dict:
         for idx, (u_id, data) in enumerate(roles_dict.items(), 1):
             user_text = f"{data['name']}"
             if data['username']:
                 user_text += f" (@{data['username']})"
                 
-            line = f"{idx}-🌷 {user_text}"
+            line = f"{RLM}{idx}-🌷 {user_text}"
             if data['read']:
                 line += " ✅️"
             if data['similar']:
                 line += " ☑️"
             caption += f"{line}\n"
     else:
-        caption += "لا يوجد أسماء بعد\n"
+        caption += f"{RLM}لا يوجد أسماء بعد\n"
         
     # 2. قسم المستمعات
-    caption += "\n🏷️ المستمعات:\n"
+    caption += f"\n{RLM}🏷️ المستمعات:\n"
     if listeners_dict:
         for idx, (u_id, data) in enumerate(listeners_dict.items(), 1):
             user_text = f"{data['name']}"
             if data['username']:
                 user_text += f" (@{data['username']})"
-            caption += f"{idx}-🌸 {user_text}\n"
+            caption += f"{RLM}{idx}-🌸 {user_text}\n"
     else:
-        caption += "لا يوجد أسماء بعد\n"
+        caption += f"{RLM}لا يوجد أسماء بعد\n"
         
     # 3. قسم المعتذرات
-    caption += "\n🏷️ المعتذرات:\n"
+    caption += f"\n{RLM}🏷️ المعتذرات:\n"
     if excused_dict:
         for idx, (u_id, data) in enumerate(excused_dict.items(), 1):
             user_text = f"{data['name']}"
             if data['username']:
                 user_text += f" (@{data['username']})"
-            caption += f"{idx}-🍂 {user_text}\n"
+            caption += f"{RLM}{idx}-🍂 {user_text}\n"
     else:
-        caption += "لا يوجد أسماء بعد\n"
+        caption += f"{RLM}لا يوجد أسماء بعد\n"
         
     # ختام القائمة
     caption += (
@@ -183,7 +182,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = query.from_user
     user_id = user.id
     full_name = user.first_name + (f" {user.last_name}" if user.last_name else "")
-    username = user.username if user.username else ""  # جلب المعرف اللاتيني إن وجد
+    username = user.username if user.username else ""
     data = query.data
 
     # 1. زر "سجل إسمي"
