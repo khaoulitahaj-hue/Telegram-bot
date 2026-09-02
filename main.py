@@ -1,3 +1,4 @@
+import os
 import logging
 from datetime import datetime
 from hijri_converter import Hijri
@@ -228,8 +229,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pass # يتجاهل الخطأ في حال لم يتغير النص
 
 def main():
-    # ضع التوكن الخاص ببوتك هنا
-    TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
+    TOKEN = os.getenv("BOT_TOKEN")
     
     app = Application.builder().token(TOKEN).build()
 
