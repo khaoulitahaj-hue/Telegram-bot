@@ -30,7 +30,8 @@ def get_formatted_header():
     gregorian_str = now.strftime("%Y / %m / %d")
     hijri_str = f"{hijri_date.year} / {hijri_date.month} / {hijri_date.day}"
     time_str = now.strftime("%H:%M")
-    
+    text += f"⏰ الوقت: {egypt_time}\n"
+
     header = (
         f"❖════════════════════❖\n"
         f"       🗓️ التاريخ الميلادي : {gregorian_str}\n"
