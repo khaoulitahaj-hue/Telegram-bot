@@ -22,24 +22,7 @@ roles_dict = {}       # {user_id: {"name": str, "read": bool, "similar": bool}}
 listeners_dict = {}   # {user_id: str}
 excused_dict = {}     # {user_id: str}
 
-def get_formatted_header():
-    """توليد ترويسة التاريخ والوقت والتنسيق المنسق"""
-    now = datetime.now()
-    hijri_date = Gregorian(now.year, now.month, now.day).to_hijri()
-    
-    gregorian_str = now.strftime("%Y/%m/%d")
-    hijri_str = f"{hijri_date.year}/{hijri_date.month}/{hijri_date.day}"
-    time_str = now.strftime("%H:%M")
-    
-    header = (
-        f"🗓 التاريخ الميلادي: {gregorian_str}\n"
-        f"التاريخ الهجري: {hijri_str}\n"
-        f"الساعة: {time_str}\n"
-        f"◉════••• ❖❖ •••════◉\n"
-        f"🌷 رضا الرحمن مبتغانا 🌷\n"
-        f"🌷 البقرة وجه 🌷\n"
-        f"•••┈┈┈••❀❀❀••┈┈┈•••\n"
-    )
+
     return header
 
 def generate_full_caption():
@@ -47,7 +30,26 @@ def generate_full_caption():
     caption = get_formatted_header() + "\n"
     
     # 1. قسم أدوار الغاليات
-    caption += "🏷️ أدوار الغاليات :\n"
+    captdef get_formatted_header():
+    """توليد ترويسة التاريخ والوقت بتنسيق متوازن بدون عبارة البقرة وجه"""
+    now = datetime.now()
+    hijri_date = Gregorian(now.year, now.month, now.day).to_hijri()
+    
+    gregorian_str = now.strftime("%Y / %m / %d")
+    hijri_str = f"{hijri_date.year} / {hijri_date.month} / {hijri_date.day}"
+    time_str = now.strftime("%H:%M")
+    
+    header = (
+        f"❖════════════════════❖\n"
+        f"🗓️ الميلادي :  {gregorian_str}\n"
+        f"🌙 الهجري  :  {hijri_str}\n"
+        f"⏰ الساعة   :  {time_str}\n"
+        f"❖════════════════════❖\n"
+        f"🌸  رضا الرحمن مبتغانا  🌸\n"
+        f"─────── ❖ ───────\n"
+    )
+    return header
+ion += "🏷️ أدوار الغاليات :\n"
     if roles_dict:
         for idx, (u_id, data) in enumerate(roles_dict.items(), 1):
             line = f"{idx}-🌷 {data['name']}"
