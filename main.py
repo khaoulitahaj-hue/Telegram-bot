@@ -1,189 +1,248 @@
 import logging
+from datetime import datetime
+from hijri_converter import Hijri
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
-
-logging.basicConfig(level=logging.INFO)
-
-# ==== إعدادات يجب تعديلها ====
-import os
-BOT_TOKEN = os.environ.get("BOT_TOKEN")          # التوكن من BotFather
-# لا حاجة لكتابة معرفات الأدمينات يدوياً — البوت يتحقق تلقائياً من تيليجرام
-# ==============================
-
-# تخزين حالة كل محادثة في الذاكرة (يُعاد تصفيرها عند إعادة تشغيل البوت)
-chat_data = {}
-
-HEADER = (
-    "الســلآمــ عليكمـ وڕحـمــة ﷲوبــڕڪآته\n\n"
-    "❄️اقرأ القرآن لك ، لقلبك ، لحث خطاك إلى الجنة \n"
-    "لشفاءك ، لسقيا روحك العطشى.❄️\n"
-    "❄️متنعماً ، مترسلًا ، لا عجلاً ؛ لكي تحيا ❄️\n\n"
-    "■■■■ رضا الرحمن مبتغانا ■■■■\n\n"
-    "أسماء الطالبات:\n\n"
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    CallbackQueryHandler,
+    ContextTypes,
 )
 
-FOOTER = (
-    "\n\n❄كفآرة آلمــجـلس❄\n\n"
-    "ســبــــحـآنك آللهمــ وبــــحمــدك\n"
-    "آشــهد آن لآ آله آلآ آنت\n"
-    "آســتغـفرك وآتوب  إليك\n"
-    "❄ــــــــــــــــــ🌿ــــــــــــــــــــ❄"
+# إعداد السجلات (Logging)
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 
-NUM_TAG = "🌿⃝❄"  # يُلحق بعد رقم كل طالبة
+# هَيْكَل تخزين البيانات في الذاكرة
+# يمكن استبداله بحفظ في ملف JSON للحفاظ على البيانات عند إيقاف البوت
+data_store = {
+    "roles": {},       # {user_id: {"name": str, "status": str}} (status: "" أو "✅️" أو "☑️")
+    "listeners": {},   # {user_id: str}
+    "excused": {},     # {user_id: str}
+    "registration_open": True,
+    "list_message_id": None,
+    "created_at": None,
+}
 
+def get_current_time_str():
+    """حساب الوقت والتاريخ الميلادي والهجري بصيغة منسقة"""
+    now = datetime.now()
+    hijri_date = Hijri.fromdate(now.date())
+    
+    time_str = now.strftime("%H:%M")
+    gregorian_str = now.strftime("%Y-%m-%d")
+    hijri_str = f"{hijri_date.year}-{hijri_date.month}-{hijri_date.day} هـ"
+    
+    return f"""🗓 التاريخ الميلادي: {gregorian_str}
+التاريخ الهجري: {hijri_str}
+الساعة: {time_str}"""
 
-async def is_admin(chat_id: int, user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    try:
-        member = await context.bot.get_chat_member(chat_id, user_id)
-        return member.status in ("administrator", "creator")
-    except Exception:
-        return False
+def build_list_text():
+    """بناء نص القائمة كاملاً حسب التنسيق المطلوب"""
+    time_header = data_store.get("created_at") or get_current_time_str()
+    
+    text = f"""{time_header}
+◉════••• ❖❖ •••════◉     
+                🌷 رضا الرحمن مبتغانا 🌷
+                       🌷البقرة وجه 🌷 
 
+    •••┈┈┈••❀❀❀••┈┈┈•••
 
-def build_list_text(chat_id: int) -> str:
-    data = chat_data.get(chat_id)
-    if not data:
-        return HEADER + FOOTER
-    lines = []
-    for i, (uid, info) in enumerate(data["students"].items(), start=1):
-        line = f"{i}{NUM_TAG} {info['name']}"
-        status = info.get("status", "")
-        if status == "read":
-            line += "  ✅️قرأت🩵"
-        elif status == "listening":
-            line += "  مستمعة🩶"
-        elif status == "excused":
-            line += "  معتذرة❤️"
-        elif status == "similar":
-            line += "  ✅️☑️🩵"
-        lines.append(line)
-    body = "\n\n".join(lines)
-    return HEADER + body + FOOTER
+🏷️ أدوار الغاليات :
+"""
+    # 1. قائمة الأدوار
+    if not data_store["roles"]:
+        text += "لا يوجد أسماء بعد\n"
+    else:
+        for idx, (uid, user_info) in enumerate(data_store["roles"].items(), 1):
+            name = user_info["name"]
+            status = user_info["status"]
+            status_text = f" {status}" if status else ""
+            text += f"{idx}-🌷 {name}{status_text}\n"
 
+    # 2. قائمة المستمعات
+    text += "\n🏷️ المستمعات:\n"
+    if not data_store["listeners"]:
+        text += "لا يوجد أسماء بعد\n"
+    else:
+        for idx, (uid, name) in enumerate(data_store["listeners"].items(), 1):
+            text += f"{idx}-🌸 {name}\n"
 
-def build_keyboard(chat_id: int) -> InlineKeyboardMarkup:
-    data = chat_data.get(chat_id, {})
-    active = data.get("active", True)
-    rows = []
-    if active:
-        rows.append([InlineKeyboardButton("🔘 سجل إسمي", callback_data="register")])
-    rows.append([
+    # 3. قائمة المعتذرات
+    text += "\n🏷️ المعتذرات:\n"
+    if not data_store["excused"]:
+        text += "لا يوجد أسماء بعد\n"
+    else:
+        for idx, (uid, name) in enumerate(data_store["excused"].items(), 1):
+            text += f"{idx}-🍂 {name}\n"
+
+    # الختام
+    text += """
+~~كفآرة آلمــجـلس~~
+
+"سُبْحَانَكَ اللَّهُمَّ وَبِحَمْدِكَ، أَشْهَدُ أَنْ لَا إِلَهَ إِلَّا أَنْتَ، أَسْتَغْفِرُكَ وَأَتُوبُ إِلَيْكَ\""""
+    return text
+
+def get_keyboard():
+    """إنشاء أزرار التفاعل"""
+    keyboard = []
+    
+    # يظهر زر التسجيل فقط إذا كان التسجيل مفتوحاً
+    if data_store["registration_open"]:
+        keyboard.append([InlineKeyboardButton("🔘 سجل إسمي", callback_data="register")])
+        
+    keyboard.append([
         InlineKeyboardButton("✅️ قرأت", callback_data="read"),
-        InlineKeyboardButton("🎧 مستمعة", callback_data="listening"),
+        InlineKeyboardButton("🎧 مستمعة", callback_data="listen"),
     ])
-    rows.append([
-        InlineKeyboardButton("🚫 معتذرة", callback_data="excused"),
+    keyboard.append([
+        InlineKeyboardButton("🚫 معتذرة", callback_data="excuse"),
         InlineKeyboardButton("☑️ متشابهات", callback_data="similar"),
     ])
-    rows.append([InlineKeyboardButton("❌️ أحذف إسمي", callback_data="unregister")])
-    return InlineKeyboardMarkup(rows)
+    keyboard.append([InlineKeyboardButton("❌️ أحذف إسمي", callback_data="delete_me")])
+    
+    return InlineKeyboardMarkup(keyboard)
 
+async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    """التحقق مما إذا كان المستخدم أدمن في المجموعة"""
+    chat_id = update.effective_chat.id
+    user_id = update.effective_user.id
+    
+    # إذا كانت الدردشة خاصة
+    if update.effective_chat.type == "private":
+        return True
+        
+    member = await context.bot.get_chat_member(chat_id, user_id)
+    return member.status in ["creator", "administrator"]
 
 async def startliste(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    chat_id = update.effective_chat.id
-    if not await is_admin(chat_id, user.id, context):
-        await update.message.reply_text("⚠️ هذا الأمر متاح فقط لأدمينات الصفحة.")
+    """الأمر الأول: إظهار أو فتح القائمة (للأدمن فقط)"""
+    if not await is_admin(update, context):
+        await update.message.reply_text("عذراً، هذا الأمر مخصص للمشرفين فقط.")
         return
-    chat_data[chat_id] = {"active": True, "students": {}, "message_id": None}
-    msg = await update.message.reply_text(
-        build_list_text(chat_id), reply_markup=build_keyboard(chat_id)
-    )
-    chat_data[chat_id]["message_id"] = msg.message_id
 
-
-async def deletliste(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    chat_id = update.effective_chat.id
-    if not await is_admin(chat_id, user.id, context):
-        await update.message.reply_text("⚠️ هذا الأمر متاح فقط لأدمينات الصفحة.")
-        return
-    chat_data.pop(chat_id, None)
-    await update.message.reply_text("🗑️ تم حذف القائمة.")
-
+    # إذا لم تكن هناك قائمة سابقة أو وقت، يتم إنشاء وقت جديد
+    if not data_store["created_at"]:
+        data_store["created_at"] = get_current_time_str()
+        
+    data_store["registration_open"] = True
+    
+    text = build_list_text()
+    reply_markup = get_keyboard()
+    
+    msg = await update.message.reply_text(text, reply_markup=reply_markup)
+    data_store["list_message_id"] = msg.message_id
 
 async def stopliste(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    chat_id = update.effective_chat.id
-    if not await is_admin(chat_id, user.id, context):
-        await update.message.reply_text("⚠️ هذا الأمر متاح فقط لأدمينات الصفحة.")
+    """إيقاف التسجيل مع الإبقاء على البيانات (للأدمن فقط)"""
+    if not await is_admin(update, context):
+        await update.message.reply_text("عذراً، هذا الأمر مخصص للمشرفين فقط.")
         return
-    data = chat_data.get(chat_id)
-    if not data:
-        await update.message.reply_text("لا توجد قائمة نشطة حالياً.")
-        return
-    data["active"] = False
-    if data.get("message_id"):
+
+    data_store["registration_open"] = False
+    text = build_list_text()
+    reply_markup = get_keyboard()
+    
+    if data_store["list_message_id"]:
         try:
             await context.bot.edit_message_text(
-                chat_id=chat_id,
-                message_id=data["message_id"],
-                text=build_list_text(chat_id),
-                reply_markup=build_keyboard(chat_id),
+                chat_id=update.effective_chat.id,
+                message_id=data_store["list_message_id"],
+                text=text,
+                reply_markup=reply_markup
             )
-        except Exception:
-            pass
-    await update.message.reply_text("🔒 تم إغلاق باب التسجيل في القائمة.")
+            await update.message.reply_text("تم إيقاف خيار (سجل إسمي) مع حفظ بقية البيانات.")
+        except Exception as e:
+            await update.message.reply_text("تم إيقاف التسجيل.")
 
+async def deleteliste(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """مسح القائمة وتصفير البيانات لبدء قائمة جديدة (للأدمن فقط)"""
+    if not await is_admin(update, context):
+        await update.message.reply_text("عذراً، هذا الأمر مخصص للمشرفين فقط.")
+        return
+
+    data_store["roles"].clear()
+    data_store["listeners"].clear()
+    data_store["excused"].clear()
+    data_store["registration_open"] = True
+    data_store["list_message_id"] = None
+    data_store["created_at"] = None
+    
+    await update.message.reply_text("تم مسح القائمة بنجاح. يمكنك الآن البدء بقائمة جديدة باستخدام /startliste")
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """التحكم في الأزرار والتفاعل مع الطالبات"""
     query = update.callback_query
-    chat_id = query.message.chat_id
+    await query.answer()
+    
     user = query.from_user
-    data = chat_data.get(chat_id)
-
-    if not data:
-        await query.answer("لا توجد قائمة نشطة حالياً.", show_alert=True)
-        return
-
+    user_id = user.id
+    full_name = user.full_name
     action = query.data
 
+    # دالة مساعدة لحذف المستخدم من جميع القوائم أولاً
+    def remove_from_all():
+        data_store["roles"].pop(user_id, None)
+        data_store["listeners"].pop(user_id, None)
+        data_store["excused"].pop(user_id, None)
+
     if action == "register":
-        if not data.get("active", True):
-            await query.answer("تم إغلاق التسجيل.", show_alert=True)
+        if not data_store["registration_open"]:
             return
-        if user.id in data["students"]:
-            await query.answer("إسمك مسجل مسبقاً.", show_alert=True)
-            return
-        data["students"][user.id] = {"name": user.full_name, "status": ""}
-        await query.answer("تم تسجيل إسمك ✅️")
+        remove_from_all()
+        data_store["roles"][user_id] = {"name": full_name, "status": ""}
 
-    elif action == "unregister":
-        if user.id in data["students"]:
-            del data["students"][user.id]
-            await query.answer("تم حذف إسمك ❌️")
+    elif action == "read":
+        if user_id in data_store["roles"]:
+            data_store["roles"][user_id]["status"] = "✅️"
         else:
-            await query.answer("إسمك غير مسجل في القائمة.", show_alert=True)
-            return
+            remove_from_all()
+            data_store["roles"][user_id] = {"name": full_name, "status": "✅️"}
 
-    elif action in ("read", "listening", "excused", "similar"):
-        if user.id not in data["students"]:
-            await query.answer("سجلي إسمك أولاً.", show_alert=True)
-            return
-        data["students"][user.id]["status"] = action
-        await query.answer("تم التحديث ✅️")
+    elif action == "similar":
+        if user_id in data_store["roles"]:
+            data_store["roles"][user_id]["status"] = "☑️"
+        else:
+            remove_from_all()
+            data_store["roles"][user_id] = {"name": full_name, "status": "☑️"}
 
-    else:
-        await query.answer()
-        return
+    elif action == "listen":
+        remove_from_all()
+        data_store["listeners"][user_id] = full_name
 
+    elif action == "excuse":
+        remove_from_all()
+        data_store["excused"][user_id] = full_name
+
+    elif action == "delete_me":
+        remove_from_all()
+
+    # تحديث نص الرسالة بنفس القائمة
+    new_text = build_list_text()
+    new_keyboard = get_keyboard()
+    
     try:
-        await query.edit_message_text(
-            text=build_list_text(chat_id), reply_markup=build_keyboard(chat_id)
-        )
+        await query.edit_message_text(text=new_text, reply_markup=new_keyboard)
     except Exception:
-        pass
-
+        pass # يتجاهل الخطأ في حال لم يتغير النص
 
 def main():
-    app = Application.builder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("startliste", startliste))
-    app.add_handler(CommandHandler("deletliste", deletliste))
-    app.add_handler(CommandHandler("stopliste", stopliste))
-    app.add_handler(CallbackQueryHandler(button_handler))
-    app.run_polling()
+    # ضع التوكن الخاص ببوتك هنا
+    TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
+    
+    app = Application.builder().token(TOKEN).build()
 
+    # تسجيل الأوامر
+    app.add_handler(CommandHandler("startliste", startliste))
+    app.add_handler(CommandHandler("stopliste", stopliste))
+    app.add_handler(CommandHandler("deleteliste", deleteliste))
+    
+    # تسجيل معالج الأزرار
+    app.add_handler(CallbackQueryHandler(button_handler))
+
+    # تشغيل البوت
+    app.run_polling()
 
 if __name__ == "__main__":
     main()
