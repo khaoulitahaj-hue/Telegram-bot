@@ -1,7 +1,7 @@
 import os
 import logging
 from datetime import datetime
-from zoneinfo import ZoneInfo
+import pytz
 from hijri_converter import Gregorian
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -17,27 +17,30 @@ logging.basicConfig(
     level=logging.INFO
 )
 
+# تحديد المنطقة الزمنية لمصر
+EGYPT_TZ = pytz.timezone("Africa/Cairo")
+
 # متغيرات حالة القائمة والبيانات في الذاكرة
 is_registration_open = True
-roles_dict = {}       # {user_id: {"name": str, "read": bool, "similar": bool}}
-listeners_dict = {}   # {user_id: str}
-excused_dict = {}     # {user_id: str}
+roles_dict = {}       # {user_id: {"name": str, "username": str, "read": bool, "similar": bool}}
+listeners_dict = {}   # {user_id: {"name": str, "username": str}}
+excused_dict = {}     # {user_id: {"name": str, "username": str}}
 
 def get_formatted_header():
-    """توليد ترويسة التاريخ والوقت بتنسيق متوازن ومحاذى للمنتصف قدر الإمكان"""
-    now = datetime.now()
+    """توليد ترويسة التاريخ والوقت بتوقيت مصر بتنسيق متوازن"""
+    # جلب الوقت الحالي بتوقيت مصر
+    now = datetime.now(EGYPT_TZ)
     hijri_date = Gregorian(now.year, now.month, now.day).to_hijri()
     
-egypt_time = datetime.now(ZoneInfo("Africa/Cairo")).strftime("%I:%M %p")
+    gregorian_str = now.strftime("%Y / %m / %d")
     hijri_str = f"{hijri_date.year} / {hijri_date.month} / {hijri_date.day}"
-    time_str = now.strftime("%H:%M")
-    text += f"⏰ الوقت: {egypt_time}\n"
-
+    time_str = now.strftime("%I:%M %p") # صيغة 12 ساعة مع AM/PM
+    
     header = (
         f"❖════════════════════❖\n"
         f"       🗓️ التاريخ الميلادي : {gregorian_str}\n"
         f"       🌙 التاريخ الهجري : {hijri_str}\n"
-        f"       ⏰ الساعة : {time_str}\n"
+        f"       ⏰ الساعة (مصر) : {time_str}\n"
         f"❖════════════════════❖\n"
         f"         🌷 رضا الرحمن مبتغانا 🌷\n"
         f"─── ❖ ───\n"
@@ -45,14 +48,18 @@ egypt_time = datetime.now(ZoneInfo("Africa/Cairo")).strftime("%I:%M %p")
     return header
 
 def generate_full_caption():
-    """بناء النص الكامل للقائمة بجميع أقسامها وترقيمها بالجهة اليمنى"""
+    """بناء النص الكامل للقائمة بجميع أقسامها والاسم اللاتيني جهة اليمين"""
     caption = get_formatted_header() + "\n"
     
     # 1. قسم أدوار الغاليات
     caption += "🏷️ أدوار الغاليات :\n"
     if roles_dict:
         for idx, (u_id, data) in enumerate(roles_dict.items(), 1):
-            line = f"🌹 {i}. \u200e{name}\n"
+            user_text = f"{data['name']}"
+            if data['username']:
+                user_text += f" (@{data['username']})"
+                
+            line = f"{idx}-🌷 {user_text}"
             if data['read']:
                 line += " ✅️"
             if data['similar']:
@@ -64,17 +71,22 @@ def generate_full_caption():
     # 2. قسم المستمعات
     caption += "\n🏷️ المستمعات:\n"
     if listeners_dict:
-        for idx, (u_id, name) in enumerate(listeners_dict.items(), 1):
-            caption += f"🌸 {i}. \u200e{name}\n"
+        for idx, (u_id, data) in enumerate(listeners_dict.items(), 1):
+            user_text = f"{data['name']}"
+            if data['username']:
+                user_text += f" (@{data['username']})"
+            caption += f"{idx}-🌸 {user_text}\n"
     else:
         caption += "لا يوجد أسماء بعد\n"
         
     # 3. قسم المعتذرات
     caption += "\n🏷️ المعتذرات:\n"
     if excused_dict:
-        for idx, (u_id, name) in enumerate(excused_dict.items(), 1):
-            caption += f"🌺 {i}. \u200e{name}\n"
-
+        for idx, (u_id, data) in enumerate(excused_dict.items(), 1):
+            user_text = f"{data['name']}"
+            if data['username']:
+                user_text += f" (@{data['username']})"
+            caption += f"{idx}-🍂 {user_text}\n"
     else:
         caption += "لا يوجد أسماء بعد\n"
         
@@ -91,7 +103,6 @@ def get_keyboard():
     """توليد الأزرار التفاعلية"""
     keyboard = []
     
-    # أزرار التسجيل (تظهر فقط إذا كان التسجيل مفتوحاً)
     if is_registration_open:
         keyboard.append([
             InlineKeyboardButton("🔘 سجل إسمي", callback_data="register_role"),
@@ -116,7 +127,6 @@ async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     chat_id = update.effective_chat.id
     user_id = update.effective_user.id
     
-    # السماح بالتجربة إن كانت المحادثة خاصة
     if update.effective_chat.type == "private":
         return True
         
@@ -144,7 +154,7 @@ async def stopliste(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     global is_registration_open
-    is_registration_open = False  # إخفاء زر "سجل إسمي" مع الإبقاء على باقي البيانات
+    is_registration_open = False
     
     await update.message.reply_text(
         "🛑 تم إيقاف التسجيل (إخفاء زر سجل إسمي) مع الحفاظ على القائمة الحالية.",
@@ -173,6 +183,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = query.from_user
     user_id = user.id
     full_name = user.first_name + (f" {user.last_name}" if user.last_name else "")
+    username = user.username if user.username else ""  # جلب المعرف اللاتيني إن وجد
     data = query.data
 
     # 1. زر "سجل إسمي"
@@ -183,7 +194,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         listeners_dict.pop(user_id, None)
         excused_dict.pop(user_id, None)
         if user_id not in roles_dict:
-            roles_dict[user_id] = {"name": full_name, "read": False, "similar": False}
+            roles_dict[user_id] = {
+                "name": full_name,
+                "username": username,
+                "read": False,
+                "similar": False
+            }
 
     # 2. زر "قرأت"
     elif data == "toggle_read":
@@ -205,13 +221,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "register_listener":
         roles_dict.pop(user_id, None)
         excused_dict.pop(user_id, None)
-        listeners_dict[user_id] = full_name
+        listeners_dict[user_id] = {"name": full_name, "username": username}
 
     # 5. زر "معتذرة"
     elif data == "register_excused":
         roles_dict.pop(user_id, None)
         listeners_dict.pop(user_id, None)
-        excused_dict[user_id] = full_name
+        excused_dict[user_id] = {"name": full_name, "username": username}
 
     # 6. زر "أحذف إسمي"
     elif data == "delete_name":
@@ -219,7 +235,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         listeners_dict.pop(user_id, None)
         excused_dict.pop(user_id, None)
 
-    # تحديث الرسالة تلقائياً بالتنسيق الجديد
+    # تحديث الرسالة
     await query.edit_message_text(
         generate_full_caption(),
         reply_markup=get_keyboard()
