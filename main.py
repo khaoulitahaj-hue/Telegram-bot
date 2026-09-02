@@ -10,7 +10,7 @@ from telegram.ext import (
     ContextTypes,
 )
 
-# إعداد السجلات
+# إعداد السجلات لمتابعة الأخطاء
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO
@@ -22,16 +22,8 @@ roles_dict = {}       # {user_id: {"name": str, "read": bool, "similar": bool}}
 listeners_dict = {}   # {user_id: str}
 excused_dict = {}     # {user_id: str}
 
-
-    return header
-
-def generate_full_caption():
-    """بناء النص الكامل للقائمة بجميع أقسامها وترقيمها"""
-    caption = get_formatted_header() + "\n"
-    
-    # 1. قسم أدوار الغاليات
-    captdef get_formatted_header():
-    """توليد ترويسة التاريخ والوقت بتنسيق متوازن بدون عبارة البقرة وجه"""
+def get_formatted_header():
+    """توليد ترويسة التاريخ والوقت بتنسيق متوازن ومحاذى للمنتصف قدر الإمكان"""
     now = datetime.now()
     hijri_date = Gregorian(now.year, now.month, now.day).to_hijri()
     
@@ -41,15 +33,21 @@ def generate_full_caption():
     
     header = (
         f"❖════════════════════❖\n"
-        f"🗓️ الميلادي :  {gregorian_str}\n"
-        f"🌙 الهجري  :  {hijri_str}\n"
-        f"⏰ الساعة   :  {time_str}\n"
+        f"       🗓️ التاريخ الميلادي : {gregorian_str}\n"
+        f"       🌙 التاريخ الهجري : {hijri_str}\n"
+        f"       ⏰ الساعة : {time_str}\n"
         f"❖════════════════════❖\n"
-        f"🌸  رضا الرحمن مبتغانا  🌸\n"
-        f"─────── ❖ ───────\n"
+        f"         🌷 رضا الرحمن مبتغانا 🌷\n"
+        f"─── ❖ ───\n"
     )
     return header
-ion += "🏷️ أدوار الغاليات :\n"
+
+def generate_full_caption():
+    """بناء النص الكامل للقائمة بجميع أقسامها وترقيمها بالجهة اليمنى"""
+    caption = get_formatted_header() + "\n"
+    
+    # 1. قسم أدوار الغاليات
+    caption += "🏷️ أدوار الغاليات :\n"
     if roles_dict:
         for idx, (u_id, data) in enumerate(roles_dict.items(), 1):
             line = f"{idx}-🌷 {data['name']}"
@@ -115,14 +113,14 @@ async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     chat_id = update.effective_chat.id
     user_id = update.effective_user.id
     
-    # إذا كانت المحادثة خاصة تسمح للتجربة
+    # السماح بالتجربة إن كانت المحادثة خاصة
     if update.effective_chat.type == "private":
         return True
         
     member = await context.bot.get_chat_member(chat_id, user_id)
     return member.status in ["creator", "administrator"]
 
-# --- الأوامر الأربعة (للأدمن فقط) ---
+# --- الأوامر الثلاثة (للأدمن فقط) ---
 
 async def startliste(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
@@ -130,7 +128,7 @@ async def startliste(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     global is_registration_open
-    is_registration_open = True  # إرجاع زر التسجيل إن كان متوقفاً
+    is_registration_open = True
     
     await update.message.reply_text(
         generate_full_caption(),
@@ -143,7 +141,7 @@ async def stopliste(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     global is_registration_open
-    is_registration_open = False  # إخفاء زر التسجيل مع الإبقاء على باقى البيانات
+    is_registration_open = False  # إخفاء زر "سجل إسمي" مع الإبقاء على باقي البيانات
     
     await update.message.reply_text(
         "🛑 تم إيقاف التسجيل (إخفاء زر سجل إسمي) مع الحفاظ على القائمة الحالية.",
@@ -161,7 +159,7 @@ async def deleteliste(update: Update, context: ContextTypes.DEFAULT_TYPE):
     excused_dict.clear()
     is_registration_open = True
     
-    await update.message.reply_text("🗑️ تم مسح كافة القوائم والأسماء بنجاح. يمكنك البدء من جديد.")
+    await update.message.reply_text("🗑️ تم مسح كافة القوائم والأسماء بنجاح. يمكنك البدء بقائمة جديدة.")
 
 # --- معالجة الضغط على الأزرار ---
 
@@ -179,7 +177,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not is_registration_open:
             await query.answer("التسجيل مغلق حالياً!", show_alert=True)
             return
-        # إزالة من باقي القوائم لمنع التكرار
         listeners_dict.pop(user_id, None)
         excused_dict.pop(user_id, None)
         if user_id not in roles_dict:
@@ -226,7 +223,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 def main():
-    # جلب التوكن المخفي من بيئة Railway
     TOKEN = os.getenv("BOT_TOKEN")
     
     if not TOKEN:
@@ -234,7 +230,7 @@ def main():
 
     app = Application.builder().token(TOKEN).build()
 
-    # تسجيل الأوامر الخاصة بالأدمن
+    # تسجيل الأوامر
     app.add_handler(CommandHandler("startliste", startliste))
     app.add_handler(CommandHandler("stopliste", stopliste))
     app.add_handler(CommandHandler("deleteliste", deleteliste))
