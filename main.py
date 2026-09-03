@@ -54,7 +54,7 @@ def get_formatted_header():
         f"{RLM}       ⏰ <b>الساعة (مصر) :</b> {time_str}\n"
         f"{RLM}<b>❖════════════════════❖</b>\n"
         f"{RLM}         🌷 <b>رضا الرحمن مبتغانا</b> 🌷\n"
-        f"{RLM}                ─── ❖ ───\n"
+        f"{RLM}             <b>─── ❖ ─── <b>\n"
     )
     return header
 
