@@ -38,7 +38,7 @@ def get_group_storage(chat_id: int):
     return groups_data[chat_id]
 
 def get_formatted_header():
-    """توليد الترويسة بالتاريخ الميلادي والهجري وتوقيت مصر بخط عريض"""
+    """توليد الترويسة بالتاريخ الميلادي والهجري وتوقيت مصر مع التوسيط الصحيح للفاصل"""
     egypt_offset = timedelta(hours=3)  # توقيت مصر UTC+3
     now = datetime.now(timezone.utc) + egypt_offset
     hijri_date = Gregorian(now.year, now.month, now.day).to_hijri()
@@ -54,12 +54,12 @@ def get_formatted_header():
         f"{RLM}       ⏰ <b>الساعة (مصر) :</b> {time_str}\n"
         f"{RLM}<b>❖════════════════════❖</b>\n"
         f"{RLM}         🌷 <b>رضا الرحمن مبتغانا</b> 🌷\n"
-        f"{RLM}             <b>─── ❖ ───<b>\n"
+        f"       ─── ❖ ───\n"
     )
     return header
 
 def generate_full_caption(chat_id: int):
-    """إنشاء القائمة مع السطور الفاصلة بين الأقسام"""
+    """إنشاء القائمة مع الفواصل والكتابة العريضة بدون خط على كفارة المجلس"""
     storage = get_group_storage(chat_id)
     roles_dict = storage["roles"]
     listeners_dict = storage["listeners"]
@@ -112,9 +112,9 @@ def generate_full_caption(chat_id: int):
     else:
         caption += f"{RLM}<i>لا يوجد أسماء بعد</i>\n"
         
-    # كفارة المجلس
+    # كفارة المجلس بدون خط (Bold فقط)
     caption += (
-        f"\n{RLM}<s>كفآرة آلمــجـلس <s>\n\n"
+        f"\n{RLM}<b>كفآرة آلمــجـلس</b>\n\n"
         f"{RLM}<b>\"سُبْحَانَكَ اللَّهُمَّ وَبِحَمْدِكَ، أَشْهَدُ أَنْ لَا إِلَهَ إِلَّا أَنْتَ، "
         f"أَسْتَغْفِرُكَ وَأَتُوبُ إِلَيْكَ\"</b>"
     )
@@ -297,4 +297,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-   
