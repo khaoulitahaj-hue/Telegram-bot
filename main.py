@@ -10,24 +10,32 @@ from telegram.ext import (
     ContextTypes,
 )
 
-# إعداد السجلات
+# إعداد السجلات لمتابعة الأخطاء
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO
 )
 
-# رمز إجبار الاتجاه من اليمين إلى اليسار (Right-to-Left Mark)
+# محرف RLM المخفي (Right-to-Left Mark) لإجبار المحاذاة لليمين للأسماء اللاتينية
 RLM = "\u200f"
 
-# متغيرات حالة القائمة والبيانات في الذاكرة
-is_registration_open = True
-roles_dict = {}       # {user_id: {"name": str, "username": str, "read": bool, "similar": bool}}
-listeners_dict = {}   # {user_id: {"name": str, "username": str}}
-excused_dict = {}     # {user_id: {"name": str, "username": str}}
+# ذاكرة متكاملة مستقلة لكل مجموعة: { chat_id: {"open": bool, "roles": {}, "listeners": {}, "excused": {}} }
+groups_data = {}
+
+def get_group_storage(chat_id: int):
+    """جلب أو إنشاء ذاكرة مستقلة بناءً على معرف المجموعة الفريد"""
+    if chat_id not in groups_data:
+        groups_data[chat_id] = {
+            "open": True,
+            "roles": {},      # {user_id: {"name": str, "username": str, "read": bool, "similar": bool}}
+            "listeners": {},  # {user_id: {"name": str, "username": str}}
+            "excused": {}     # {user_id: {"name": str, "username": str}}
+        }
+    return groups_data[chat_id]
 
 def get_formatted_header():
-    """توليد ترويسة التاريخ والوقت بتوقيت مصر بتنسيق متوازن"""
-    egypt_offset = timedelta(hours=3) # توقيت مصر UTC+3
+    """توليد الترويسة بالتاريخ الميلادي والهجري وتوقيت مصر"""
+    egypt_offset = timedelta(hours=3)  # توقيت مصر UTC+3
     now = datetime.now(timezone.utc) + egypt_offset
     hijri_date = Gregorian(now.year, now.month, now.day).to_hijri()
     
@@ -36,18 +44,23 @@ def get_formatted_header():
     time_str = now.strftime("%I:%M %p")
     
     header = (
-        f"❖════════════════════❖\n"
-        f"       🗓️ التاريخ الميلادي : {gregorian_str}\n"
-        f"       🌙 التاريخ الهجري : {hijri_str}\n"
-        f"       ⏰ الساعة (مصر) : {time_str}\n"
-        f"❖════════════════════❖\n"
-        f"         🌷 رضا الرحمن مبتغانا 🌷\n"
-        f"─── ❖ ───\n"
+        f"{RLM}❖════════════════════❖\n"
+        f"{RLM}       🗓️ التاريخ الميلادي : {gregorian_str}\n"
+        f"{RLM}       🌙 التاريخ الهجري : {hijri_str}\n"
+        f"{RLM}       ⏰ الساعة (مصر) : {time_str}\n"
+        f"{RLM}❖════════════════════❖\n"
+        f"{RLM}         🌷 رضا الرحمن مبتغانا 🌷\n"
+        f"{RLM}─── ❖ ───\n"
     )
     return header
 
-def generate_full_caption():
-    """بناء النص الكامل للقائمة مع إجبار المحاذاة لليمين باستخدام RLM"""
+def generate_full_caption(chat_id: int):
+    """إنشاء القائمة مع المحاذاة الكاملة لليمين واستخراج بيانات المجموعة المحددة"""
+    storage = get_group_storage(chat_id)
+    roles_dict = storage["roles"]
+    listeners_dict = storage["listeners"]
+    excused_dict = storage["excused"]
+
     caption = get_formatted_header() + "\n"
     
     # 1. قسم أدوار الغاليات
@@ -58,6 +71,7 @@ def generate_full_caption():
             if data['username']:
                 user_text += f" (@{data['username']})"
                 
+            # إضافة RLM في بداية السطر لضمان محاذاة الأسماء اللاتينية لليمين
             line = f"{RLM}{idx}-🌷 {user_text}"
             if data['read']:
                 line += " ✅️"
@@ -89,20 +103,21 @@ def generate_full_caption():
     else:
         caption += f"{RLM}لا يوجد أسماء بعد\n"
         
-    # ختام القائمة
+    # كفارة المجلس
     caption += (
-        "\n~~كفآرة آلمــجـلس~~\n\n"
-        "\"سُبْحَانَكَ اللَّهُمَّ وَبِحَمْدِكَ، أَشْهَدُ أَنْ لَا إِلَهَ إِلَّا أَنْتَ، "
-        "أَسْتَغْفِرُكَ وَأَتُوبُ إِلَيْكَ\""
+        f"\n{RLM}~~كفآرة آلمــجـلس~~\n\n"
+        f"{RLM}\"سُبْحَانَكَ اللَّهُمَّ وَبِحَمْدِكَ، أَشْهَدُ أَنْ لَا إِلَهَ إِلَّا أَنْتَ، "
+        f"أَسْتَغْفِرُكَ وَأَتُوبُ إِلَيْكَ\""
     )
     
     return caption
 
-def get_keyboard():
-    """توليد الأزرار التفاعلية"""
+def get_keyboard(chat_id: int):
+    """توليد الأزرار التفاعلية بحسب حالة التسجيل للمجموعة"""
+    storage = get_group_storage(chat_id)
     keyboard = []
     
-    if is_registration_open:
+    if storage["open"]:
         keyboard.append([
             InlineKeyboardButton("🔘 سجل إسمي", callback_data="register_role"),
             InlineKeyboardButton("✅️ قرأت", callback_data="toggle_read"),
@@ -122,7 +137,7 @@ def get_keyboard():
     return InlineKeyboardMarkup(keyboard)
 
 async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    """التحقق مما إذا كان مستخدم الأمر أدمن في المجموعة"""
+    """التحقق من صلاحية المشرف"""
     chat_id = update.effective_chat.id
     user_id = update.effective_user.id
     
@@ -132,19 +147,20 @@ async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     member = await context.bot.get_chat_member(chat_id, user_id)
     return member.status in ["creator", "administrator"]
 
-# --- الأوامر الثلاثة (للأدمن فقط) ---
+# --- أوامر الأدمن ---
 
 async def startliste(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_admin(update, context):
         await update.message.reply_text("⚠️ هذا الأمر مخصص لأدمن المجموعة فقط.")
         return
 
-    global is_registration_open
-    is_registration_open = True
+    chat_id = update.effective_chat.id
+    storage = get_group_storage(chat_id)
+    storage["open"] = True
     
     await update.message.reply_text(
-        generate_full_caption(),
-        reply_markup=get_keyboard()
+        generate_full_caption(chat_id),
+        reply_markup=get_keyboard(chat_id)
     )
 
 async def stopliste(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -152,12 +168,13 @@ async def stopliste(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚠️ هذا الأمر مخصص لأدمن المجموعة فقط.")
         return
 
-    global is_registration_open
-    is_registration_open = False
+    chat_id = update.effective_chat.id
+    storage = get_group_storage(chat_id)
+    storage["open"] = False
     
     await update.message.reply_text(
-        "🛑 تم إيقاف التسجيل (إخفاء زر سجل إسمي) مع الحفاظ على القائمة الحالية.",
-        reply_markup=get_keyboard()
+        "🛑 تم إيقاف التسجيل (إخفاء زر سجل إسمي) مع الحفاظ على القائمة الحالية لهذه المجموعة.",
+        reply_markup=get_keyboard(chat_id)
     )
 
 async def deleteliste(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -165,20 +182,27 @@ async def deleteliste(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚠️ هذا الأمر مخصص لأدمن المجموعة فقط.")
         return
 
-    global roles_dict, listeners_dict, excused_dict, is_registration_open
-    roles_dict.clear()
-    listeners_dict.clear()
-    excused_dict.clear()
-    is_registration_open = True
+    chat_id = update.effective_chat.id
+    storage = get_group_storage(chat_id)
+    storage["roles"].clear()
+    storage["listeners"].clear()
+    storage["excused"].clear()
+    storage["open"] = True
     
-    await update.message.reply_text("🗑️ تم مسح كافة القوائم والأسماء بنجاح. يمكنك البدء بقائمة جديدة.")
+    await update.message.reply_text("🗑️ تم مسح قائمة هذه المجموعة بنجاح. يمكنك البدء بقائمة جديدة.")
 
-# --- معالجة الضغط على الأزرار ---
+# --- معالج الأزرار التفاعلية ---
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     
+    chat_id = query.message.chat_id
+    storage = get_group_storage(chat_id)
+    roles_dict = storage["roles"]
+    listeners_dict = storage["listeners"]
+    excused_dict = storage["excused"]
+
     user = query.from_user
     user_id = user.id
     full_name = user.first_name + (f" {user.last_name}" if user.last_name else "")
@@ -187,7 +211,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # 1. زر "سجل إسمي"
     if data == "register_role":
-        if not is_registration_open:
+        if not storage["open"]:
             await query.answer("التسجيل مغلق حالياً!", show_alert=True)
             return
         listeners_dict.pop(user_id, None)
@@ -234,17 +258,17 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         listeners_dict.pop(user_id, None)
         excused_dict.pop(user_id, None)
 
-    # تحديث الرسالة
+    # تحديث نص القائمة الخاصة بالمجموعة فوراً
     await query.edit_message_text(
-        generate_full_caption(),
-        reply_markup=get_keyboard()
+        generate_full_caption(chat_id),
+        reply_markup=get_keyboard(chat_id)
     )
 
 def main():
     TOKEN = os.getenv("BOT_TOKEN")
     
     if not TOKEN:
-        raise ValueError("خطأ: التوكن غير موجود! تأكد من إضافته في Railway تحت اسم BOT_TOKEN")
+        raise ValueError("خطأ: لم يتم العثور على BOT_TOKEN في متغيرات البيئة!")
 
     app = Application.builder().token(TOKEN).build()
 
@@ -261,3 +285,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+        
